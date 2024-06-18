@@ -1,0 +1,528 @@
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import TimestampType, DoubleType, StructType, StructField, StringType, IntegerType
+import joblib
+
+# Configuración de Kafka
+KAFKA_SERVER = 'localhost:9094'
+ACCESS_LOG_TOPIC = 'transacciones-transacciones'
+
+# Definir el esquema para los datos de Kafka
+schema = StructType([
+    StructField("payload", StructType([
+        StructField("id", IntegerType(), False),
+        StructField("fecha", TimestampType(), True),
+        StructField("dinero", DoubleType(), True),
+        StructField("descripcion", StringType(), True),
+        StructField("cuenta_origen", StringType(), True),
+        StructField("cuenta_destino", StringType(), True),
+        StructField("pais_procedencia", StringType(), True),
+        StructField("pais_remitente", StringType(), True),
+        StructField("tipo_origen", StringType(), True),
+        StructField("tipo_destino", StringType(), True)
+    ]), False)
+])
+# Inicializar la sesión de Spark
+spark = SparkSession.builder \
+    .appName("FraudDetection") \
+    .getOrCreate()
+
+# Set Spark logging level to ERROR to avoid varios otros logs en consola.
+spark.sparkContext.setLogLevel("ERROR")
+
+df = spark \
+    .readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_SERVER) \
+    .option("subscribe", ACCESS_LOG_TOPIC) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+fraud_detection_df = df.selectExpr("CAST(value AS STRING) as json") \
+    .select(from_json(col("json"), schema).alias("data")) \
+    .select("data.*")
+
+# Mostrar el esquema para verificar
+
+# Nuevo dataframe con las columnas necesarias
+prueba = fraud_detection_df.select("payload.*")
+prueba.printSchema()
+
+
+# Cargar el modelo previamente entrenado
+modelo = joblib.load('random_forest_model.pkl')
+
+def predecir(df, batch_id):
+    df.printSchema()
+ 
+    # Convertir a Pandas DataFrame
+    pd_df = df.toPandas()
+    # Eliminar columnas innecesarias
+    df = pd_df.drop('id','fecha', 'descripcion', 'cuenta_origen', 'cuenta_destino')
+    # Convertir variables categóricas en representaciones numéricas utilizando codificación one-hot
+    columnas_cat = ['pais_procedencia', 'pais_remitente', 'tipo_origen', 'tipo_destino']
+    for columna in columnas_cat:
+        df = df.join(df.select(columna).distinct(), on=columna)
+    # Aplicar el modelo para predecir
+    predicciones = modelo.predict(df)
+    # Convertir de nuevo a DataFrame de Spark
+    spark_df = spark.createDataFrame(predicciones)
+    print("Predicciones para el lote", batch_id)
+    print(spark_df.show())
+  
+# Escribir los datos procesados usando el método foreachBatch
+query = fraud_detection_df \
+    .writeStream \
+    .foreachBatch(predecir) \
+    .outputMode("append") \
+    .start()
+
+query.awaitTermination()
+
+
+
+--------------------------------------------------------------------------------
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import TimestampType, DoubleType, StructType, StructField, StringType, IntegerType
+
+# Configuración de Kafka
+KAFKA_SERVER = 'localhost:9094'
+ACCESS_LOG_TOPIC = 'transacciones-transacciones'
+
+# Definir el esquema para los datos de Kafka
+schema = StructType([
+    StructField("payload", StructType([
+        StructField("id", IntegerType(), False),
+        StructField("fecha", TimestampType(), True),
+        StructField("dinero", DoubleType(), True),
+        StructField("descripcion", StringType(), True),
+        StructField("cuenta_origen", StringType(), True),
+        StructField("cuenta_destino", StringType(), True),
+        StructField("pais_procedencia", StringType(), True),
+        StructField("pais_remitente", StringType(), True),
+        StructField("tipo_origen", StringType(), True),
+        StructField("tipo_destino", StringType(), True)
+    ]), False)
+])
+
+# Inicializar la sesión de Spark
+spark = SparkSession.builder \
+    .appName("VisualizarDatosKafka") \
+    .getOrCreate()
+
+# Set Spark logging level to ERROR to avoid varios otros logs en consola.
+spark.sparkContext.setLogLevel("ERROR")
+
+# Leer datos desde Kafka como stream
+df = spark \
+    .readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_SERVER) \
+    .option("subscribe", ACCESS_LOG_TOPIC) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Convertir los datos JSON de Kafka al DataFrame con el esquema definido
+data_df = df.selectExpr("CAST(value AS STRING) as json") \
+            .select(from_json(col("json"), schema).alias("data")) \
+            .select("data.payload.*")
+
+# Mostrar el esquema del DataFrame para verificar la estructura de los datos
+data_df.printSchema()
+
+# Visualizar los datos de Kafka en la consola
+query = data_df \
+    .writeStream \
+    .outputMode("append") \
+    .format("console") \
+    .start()
+
+query.awaitTermination()
+
+
+--------------------------------------------------------------------------------
+#Hace el one hot encoding de las variables categóricas
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import TimestampType, DoubleType, StructType, StructField, StringType, IntegerType
+import joblib
+import pandas as pd
+
+# Configuración de Kafka
+KAFKA_SERVER = 'localhost:9094'
+ACCESS_LOG_TOPIC = 'transacciones-transacciones'
+
+# Definir el esquema para los datos de Kafka
+schema = StructType([
+    StructField("payload", StructType([
+        StructField("id", IntegerType(), False),
+        StructField("fecha", TimestampType(), True),
+        StructField("dinero", DoubleType(), True),
+        StructField("descripcion", StringType(), True),
+        StructField("cuenta_origen", StringType(), True),
+        StructField("cuenta_destino", StringType(), True),
+        StructField("pais_procedencia", StringType(), True),
+        StructField("pais_remitente", StringType(), True),
+        StructField("tipo_origen", StringType(), True),
+        StructField("tipo_destino", StringType(), True)
+    ]), False)
+])
+
+# Inicializar la sesión de Spark
+spark = SparkSession.builder \
+    .appName("VisualizarDatosKafka") \
+    .getOrCreate()
+
+# Cargar el modelo previamente entrenado
+modelo = joblib.load('random_forest_model.pkl')
+
+# Set Spark logging level to ERROR to avoid varios otros logs en consola.
+spark.sparkContext.setLogLevel("ERROR")
+
+# Leer datos desde Kafka como stream
+df = spark \
+    .readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_SERVER) \
+    .option("subscribe", ACCESS_LOG_TOPIC) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Convertir los datos JSON de Kafka al DataFrame con el esquema definido
+data_df = df.selectExpr("CAST(value AS STRING) as json") \
+            .select(from_json(col("json"), schema).alias("data")) \
+            .select("data.payload.*")
+
+# Mostrar el esquema del DataFrame para verificar la estructura de los datos
+data_df.printSchema()
+
+# DataFrame para el modelo: solo los datos relevantes (con id)
+modelo_df = data_df.select("id", "dinero", "pais_procedencia", "pais_remitente", "tipo_origen", "tipo_destino")
+
+# Función para predecir con el modelo
+def predecir(df, batch_id):
+    # Convertir a Pandas DataFrame
+    pd_df = df.toPandas()
+
+    pd_df = pd.get_dummies(pd_df, columns=['pais_procedencia', 'pais_remitente', 'tipo_origen', 'tipo_destino'])
+    
+    print(pd_df)
+
+    # Predecir utilizando el modelo
+    predicciones = modelo.predict(pd_df)
+    
+    # Crear DataFrame con resultados de predicción y mostrar los ids
+    resultados_df = pd.DataFrame({'id': pd_df['id'], 'prediccion': predicciones})
+    
+    # Mostrar los ids que coinciden con los datos que ha procesado el modelo
+    print(f"IDs con predicciones para el lote {batch_id}:")
+    print(resultados_df[resultados_df['prediccion'] == 1]['id'].values)
+    
+# Visualizar los datos de Kafka en la consola y pasarlos al modelo
+query = modelo_df \
+    .writeStream \
+    .outputMode("append") \
+    .foreachBatch(predecir) \
+    .start()
+
+query.awaitTermination()
+--------------------------------------------------------------------------------
+#Conseguimos que saque las predicciones de fraude
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import TimestampType, DoubleType, StructType, StructField, StringType, IntegerType
+import joblib
+import pandas as pd
+
+# Configuración de Kafka
+KAFKA_SERVER = 'localhost:9094'
+ACCESS_LOG_TOPIC = 'transacciones-transacciones'
+
+# Definir el esquema para los datos de Kafka
+schema = StructType([
+    StructField("payload", StructType([
+        StructField("id", IntegerType(), False),
+        StructField("fecha", StringType(), True),
+        StructField("dinero", DoubleType(), True),
+        StructField("descripcion", StringType(), True),
+        StructField("cuenta_origen", StringType(), True),
+        StructField("cuenta_destino", StringType(), True),
+        StructField("pais_procedencia", StringType(), True),
+        StructField("pais_remitente", StringType(), True),
+        StructField("tipo_origen", StringType(), True),
+        StructField("tipo_destino", StringType(), True)
+    ]), False)
+])
+
+# Inicializar la sesión de Spark
+spark = SparkSession.builder \
+    .appName("VisualizarDatosKafka") \
+    .getOrCreate()
+
+# Cargar el modelo previamente entrenado
+modelo = joblib.load('random_forest_model.pkl')
+
+# Set Spark logging level to ERROR to avoid varios otros logs en consola.
+spark.sparkContext.setLogLevel("ERROR")
+
+# Leer datos desde Kafka como stream
+df = spark \
+    .readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_SERVER) \
+    .option("subscribe", ACCESS_LOG_TOPIC) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Convertir los datos JSON de Kafka al DataFrame con el esquema definido
+data_df = df.selectExpr("CAST(value AS STRING) as json") \
+            .select(from_json(col("json"), schema).alias("data")) \
+            .select("data.payload.*")
+
+# Mostrar el esquema del DataFrame para verificar la estructura de los datos
+data_df.printSchema()
+
+# Función para predecir con el modelo
+def predecir(df, batch_id):
+    datos_originales = df.toPandas()
+    print("Datos originales:")
+    print(datos_originales)
+
+    # DataFrame para el modelo: solo los datos relevantes (con id)
+    df = df.select("dinero", "pais_procedencia", "pais_remitente", "tipo_origen", "tipo_destino")
+
+    # Convertir a Pandas DataFrame
+    pd_df = df.toPandas()
+
+    pd_df = pd.get_dummies(pd_df, columns=['pais_procedencia', 'pais_remitente', 'tipo_origen', 'tipo_destino'])
+    
+    print(pd_df)
+
+    # Predecir utilizando el modelo
+    predicciones = modelo.predict(pd_df)
+
+    fraude_detectado = datos_originales[predicciones == 1]
+    
+    # Crear DataFrame con resultados de predicción y mostrar los ids
+    print(fraude_detectado)
+    
+
+query = data_df \
+    .writeStream \
+    .outputMode("append") \
+    .foreachBatch(predecir) \
+    .start()
+
+query.awaitTermination()
+
+
+--------------------------------------------------------------------------------
+#Ahora vamos a batch
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+import joblib
+import pandas as pd
+
+# Configuración de Kafka
+KAFKA_SERVER = 'localhost:9094'
+ACCESS_LOG_TOPIC = 'transacciones-transacciones'
+
+# Definir el esquema para los datos de Kafka
+schema = StructType([
+    StructField("payload", StructType([
+        StructField("id", IntegerType(), False),
+        StructField("fecha", StringType(), True),
+        StructField("dinero", DoubleType(), True),
+        StructField("descripcion", StringType(), True),
+        StructField("cuenta_origen", StringType(), True),
+        StructField("cuenta_destino", StringType(), True),
+        StructField("pais_procedencia", StringType(), True),
+        StructField("pais_remitente", StringType(), True),
+        StructField("tipo_origen", StringType(), True),
+        StructField("tipo_destino", StringType(), True)
+    ]), False)
+])
+
+# Inicializar la sesión de Spark
+spark = SparkSession.builder \
+    .appName("VisualizarDatosKafka") \
+    .getOrCreate()
+
+# Cargar el modelo y las características
+modelo = joblib.load('random_forest_model.pkl')
+feature_names = joblib.load('feature_names.pkl')
+
+# Set Spark logging level to ERROR to avoid varios otros logs en consola.
+spark.sparkContext.setLogLevel("ERROR")
+
+# Leer datos desde Kafka como stream
+df = spark \
+    .readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_SERVER) \
+    .option("subscribe", ACCESS_LOG_TOPIC) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Convertir los datos JSON de Kafka al DataFrame con el esquema definido
+data_df = df.selectExpr("CAST(value AS STRING) as json") \
+            .select(from_json(col("json"), schema).alias("data")) \
+            .select("data.payload.*")
+
+# Mostrar el esquema del DataFrame para verificar la estructura de los datos
+data_df.printSchema()
+
+# Función para predecir con el modelo
+def predecir(df, batch_id):
+    datos_originales = df.toPandas()
+    print("Datos originales:")
+    print(datos_originales)
+
+    # DataFrame para el modelo: solo los datos relevantes (con id)
+    df = df.select("dinero", "pais_procedencia", "pais_remitente", "tipo_origen", "tipo_destino")
+
+    # Convertir a Pandas DataFrame
+    pd_df = df.toPandas()
+
+    pd_df = pd.get_dummies(pd_df, columns=['pais_procedencia', 'pais_remitente', 'tipo_origen', 'tipo_destino'])
+
+    # Reindexar las columnas para asegurarse de que coinciden con las características usadas en el entrenamiento
+    pd_df = pd_df.reindex(columns=feature_names, fill_value=0)
+    
+    print(pd_df)
+
+    # Predecir utilizando el modelo
+    predicciones = modelo.predict(pd_df)
+
+    # Verificar si se ha detectado fraude
+    if (predicciones == 1).any():
+        fraude_detectado = datos_originales[predicciones == 1]
+    else:
+        fraude_detectado = "No se ha encontrado fraude"
+    
+    print(f"Procesando micro-batch {batch_id}")
+    # Crear DataFrame con resultados de predicción y mostrar los ids
+    print(fraude_detectado)
+
+query = data_df \
+    .writeStream \
+    .outputMode("append") \
+    .foreachBatch(predecir) \
+    .start()
+
+query.awaitTermination()
+
+
+
+--------------------------------------------------------------------------------
+"""
+# Enviar los datos a HDFS
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+import joblib
+import pandas as pd
+import os
+
+# Configuración de Kafka
+KAFKA_SERVER = '192.168.13.10:9094'
+ACCESS_LOG_TOPIC = 'transacciones-transacciones'
+# Ruta local y en HDFS para el archivo CSV acumulativo
+local_csv_path = "fraudes_detectados.csv"
+hdfs_csv_path = "hdfs://cluster-bda:9000/bda/Proyecto/fraudes_detectados.csv"
+
+# Definir el esquema para los datos de Kafka
+schema = StructType([
+    StructField("payload", StructType([
+        StructField("id", IntegerType(), False),
+        StructField("fecha", StringType(), True),
+        StructField("dinero", DoubleType(), True),
+        StructField("descripcion", StringType(), True),
+        StructField("cuenta_origen", StringType(), True),
+        StructField("cuenta_destino", StringType(), True),
+        StructField("pais_procedencia", StringType(), True),
+        StructField("pais_remitente", StringType(), True),
+        StructField("tipo_origen", StringType(), True),
+        StructField("tipo_destino", StringType(), True)
+    ]), False)
+])
+
+# Inicializar la sesión de Spark
+spark = SparkSession.builder \
+    .appName("VisualizarDatosKafka") \
+    .getOrCreate()
+
+# Cargar el modelo y las características
+modelo = joblib.load('random_forest_model.pkl')
+feature_names = joblib.load('feature_names.pkl')
+
+# Set Spark logging level to ERROR to avoid varios otros logs en consola.
+spark.sparkContext.setLogLevel("ERROR")
+
+# Leer datos desde Kafka como stream
+df = spark \
+    .readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_SERVER) \
+    .option("subscribe", ACCESS_LOG_TOPIC) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Convertir los datos JSON de Kafka al DataFrame con el esquema definido
+data_df = df.selectExpr("CAST(value AS STRING) as json") \
+            .select(from_json(col("json"), schema).alias("data")) \
+            .select("data.payload.*")
+
+# Mostrar el esquema del DataFrame para verificar la estructura de los datos
+data_df.printSchema()
+
+# Función para predecir con el modelo
+def predecir(df, batch_id):
+    
+    datos_originales = df.toPandas()
+    print("Datos originales convetidos a Pandas: ")
+
+    # DataFrame para el modelo: solo los datos relevantes (con id)
+    df_modelo = df.select("dinero", "pais_procedencia", "pais_remitente", "tipo_origen", "tipo_destino")
+
+    # Convertir a Pandas DataFrame
+    pd_df = df_modelo.toPandas()
+
+    pd_df = pd.get_dummies(pd_df, columns=['pais_procedencia', 'pais_remitente', 'tipo_origen', 'tipo_destino'])
+
+    # Reindexar las columnas para asegurarse de que coinciden con las características usadas en el entrenamiento
+    pd_df = pd_df.reindex(columns=feature_names, fill_value=0)
+
+    # Predecir utilizando el modelo
+    predicciones = modelo.predict(pd_df)
+    print("entra en predecir")
+
+    # Verificar si se ha detectado fraude
+    if (predicciones == 1).any():
+        fraude_detectado = datos_originales[predicciones == 1]
+        
+        # Convertir a Pandas DataFrame y concatenar con el archivo acumulativo local
+        if os.path.exists(local_csv_path):
+            fraude_detectado.to_csv(local_csv_path, mode='a', header=False, index=False)
+        else:
+            fraude_detectado.to_csv(local_csv_path, index=False)
+
+        # Escribir el archivo acumulativo en HDFS sobrescribiendo el anterior
+        os.system(f"hdfs dfs -put -f {local_csv_path} {hdfs_csv_path}")
+
+    else:
+        fraude_detectado = "No se ha encontrado fraude"
+    
+    print(f"Procesando micro-batch {batch_id}")
+    print(fraude_detectado)
+
+query = data_df \
+    .writeStream \
+    .outputMode("append") \
+    .foreachBatch(predecir) \
+    .start()
+
+query.awaitTermination()
