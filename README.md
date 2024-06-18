@@ -607,8 +607,7 @@ query.awaitTermination()
 spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --master spark://192.168.13.10:7077 deteccion_fraudes.py
 ```
 
-> A continuacion ejecutariamos nuestro consumer y veriamos como spark va detectando los fraudes y los va guardando en HDFS
-> Vemos la salida en la consola de spark
+> A continuacion ejecutariamos nuestro consumer y veriamos como spark va detectando los fraudes y los va guardando en HDFS. Vemos la salida en la consola de spark
 ![alt text](img/spark.png)
 
 > Vemos la salida del consumer
