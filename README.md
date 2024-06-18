@@ -623,9 +623,9 @@ spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --maste
 
 > Con esta visulaizacion de los datos podemos ver de que paises provienen los fraudes y a que cuentas van dirigidos. Y la cantidad de dinero que se a movido por pais. 
 
-> PowerBI tambien nos permite visulaizra una tabla con todos los datos con la que podremos investigar mas a fondo los fraudes detectados.
+> PowerBI tambien nos permite visulaizra una tabla con todos los datos con la que podremos investigar más a fondo los fraudes detectados.
 ![alt text](img/data_PBI.png)
 
-12. Aqui tenemos un video de la ejecucion del proyecto
+12. En el repositorio hay un video de muestra.
 
 
