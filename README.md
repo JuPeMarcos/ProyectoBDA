@@ -475,9 +475,9 @@ curl http://localhost:8083/connectors/mysql-employees-source-connector/status
 9. Visualizacion del consumo de datos
 
 > Consumimos los datos de kafka
-´´´bash
+```bash
 bin/kafka-console-consumer.sh --topic transacciones-transacciones --from-beginning --bootstrap-server 192.168.13.10:9094
-´´´
+```
 
 10. Configuracion de Spark
 
